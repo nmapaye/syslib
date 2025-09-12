@@ -13,11 +13,28 @@ A small header-only library focused on practical systems building blocks:
 - CMake 3.20+
 - C++20 compiler (GCC 11+, Clang 13+, AppleClang 14+)
 
+Option A — Presets (recommended)
+
 ```
-cmake -S . -B build -DSYSLIB_BUILD_TESTS=ON -DSYSLIB_BUILD_BENCHMARKS=ON
+# Configure
+cmake --preset release     # or: debug, asan-ubsan, tsan, bench
+
+# Build
+cmake --build --preset release -j
+
+# Test
+ctest --preset release
+```
+
+Option B — Manual
+
+```
+cmake -S . -B build -G Ninja -DSYSLIB_BUILD_TESTS=ON -DSYSLIB_BUILD_BENCHMARKS=ON
 cmake --build build -j
 ctest --test-dir build -V
 ```
+
+Tip: Install ccache to speed up incremental builds. Presets already set `CMAKE_CXX_COMPILER_LAUNCHER=ccache` if available.
 
 ## Headers & APIs
 

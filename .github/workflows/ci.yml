@@ -15,20 +15,50 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Set up compiler
+        run: |
+          if [[ "${{ matrix.compiler }}" == "gcc" ]]; then echo "CXX=g++" >> $GITHUB_ENV; else echo "CXX=clang++" >> $GITHUB_ENV; fi
       - name: Install deps (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake g++ clang
-      - name: Configure
+          sudo apt-get install -y ninja-build cmake g++ clang ccache
+      - name: Install deps (macOS)
+        if: runner.os == 'macOS'
         run: |
-          cmake -S . -B build \
-            -G Ninja \
-            -DSYSLIB_BUILD_TESTS=ON \
-            -DSYSLIB_BUILD_BENCHMARKS=OFF \
-            -DSYSLIB_ENABLE_ASAN=$([[ "${{ matrix.san }}" == "asan-ubsan" ]] && echo ON || echo OFF) \
-            -DSYSLIB_ENABLE_UBSAN=$([[ "${{ matrix.san }}" == "asan-ubsan" ]] && echo ON || echo OFF)
+          brew update
+          brew install ninja ccache
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-${{ matrix.compiler }}-${{ hashFiles('**/CMakeLists.txt', '**/*.hpp', '**/*.h', 'CMakePresets.json') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-${{ matrix.compiler }}-
+            ${{ runner.os }}-ccache-
+      - name: Cache FetchContent
+        uses: actions/cache@v4
+        with:
+          path: |
+            ./.cache/fetchcontent
+          key: ${{ runner.os }}-fetchcontent-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json') }}
+          restore-keys: |
+            ${{ runner.os }}-fetchcontent-
+      - name: Configure sanity
+        run: |
+          cmake -S . -B build/sanity -G Ninja -Werror=dev -Wdeprecated \
+            -DSYSLIB_BUILD_TESTS=OFF -DSYSLIB_BUILD_BENCHMARKS=OFF
+      - name: Configure preset
+        run: |
+          PRESET=${{ matrix.san == 'asan-ubsan' && 'asan-ubsan' || 'release' }}
+          echo "Using preset: $PRESET with CXX=$CXX"
+          cmake --preset $PRESET
       - name: Build
-        run: cmake --build build -j 2
+        run: |
+          PRESET=${{ matrix.san == 'asan-ubsan' && 'asan-ubsan' || 'release' }}
+          cmake --build --preset $PRESET -j 2
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          PRESET=${{ matrix.san == 'asan-ubsan' && 'asan-ubsan' || 'release' }}
+          ctest --preset $PRESET

@@ -1,0 +1,86 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base-ninja",
+      "displayName": "Base (Ninja)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_CXX_EXTENSIONS": "OFF",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_FETCHCONTENT_BASE_DIR": "${sourceDir}/.cache/fetchcontent"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": ["base-ninja"],
+      "displayName": "Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SYSLIB_BUILD_TESTS": "ON",
+        "SYSLIB_BUILD_BENCHMARKS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": ["base-ninja"],
+      "displayName": "Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SYSLIB_BUILD_TESTS": "ON",
+        "SYSLIB_BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "asan-ubsan",
+      "inherits": ["base-ninja"],
+      "displayName": "ASan+UBSan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "SYSLIB_BUILD_TESTS": "ON",
+        "SYSLIB_BUILD_BENCHMARKS": "OFF",
+        "SYSLIB_ENABLE_ASAN": "ON",
+        "SYSLIB_ENABLE_UBSAN": "ON"
+      }
+    },
+    {
+      "name": "tsan",
+      "inherits": ["base-ninja"],
+      "displayName": "TSan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "SYSLIB_BUILD_TESTS": "ON",
+        "SYSLIB_BUILD_BENCHMARKS": "OFF",
+        "SYSLIB_ENABLE_TSAN": "ON"
+      }
+    },
+    {
+      "name": "bench",
+      "inherits": ["base-ninja"],
+      "displayName": "Benchmarks",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SYSLIB_BUILD_TESTS": "OFF",
+        "SYSLIB_BUILD_BENCHMARKS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "asan-ubsan", "configurePreset": "asan-ubsan" },
+    { "name": "tsan", "configurePreset": "tsan" },
+    { "name": "bench", "configurePreset": "bench" }
+  ],
+  "testPresets": [
+    { "name": "debug", "configurePreset": "debug", "output": {"outputOnFailure": true} },
+    { "name": "release", "configurePreset": "release", "output": {"outputOnFailure": true} },
+    { "name": "asan-ubsan", "configurePreset": "asan-ubsan", "output": {"outputOnFailure": true} },
+    { "name": "tsan", "configurePreset": "tsan", "output": {"outputOnFailure": true} }
+  ]
+}
+
