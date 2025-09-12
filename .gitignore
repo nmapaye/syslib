@@ -1,0 +1,35 @@
+# Build directories
+build/
+build-*/
+build_*/
+*/build/
+
+# CMake/Ninja artifacts
+CMakeCache.txt
+CMakeFiles/
+Testing/
+*.ninja
+*.ninja_deps
+*.ninja_log
+compile_commands.json
+
+# FetchContent/cache
+_deps/
+.cache/
+
+# Object/library/binary files
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# macOS
+.DS_Store
+
+# Editors/IDE
+.idea/
+.vscode/
+

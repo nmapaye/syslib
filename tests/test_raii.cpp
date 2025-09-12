@@ -10,12 +10,15 @@
 
 using namespace syslib;
 
-TEST(RAII, UniqueHandleBasics) {
-  struct dummy_close {
-    static inline int called = 0;
-    void operator()(int h) const noexcept { if (h != -1) ++called; }
-  };
+namespace {
+struct dummy_close {
+  static inline int called = 0;
+  void operator()(int h) const noexcept { if (h != -1) ++called; }
+};
+}  // namespace
 
+TEST(RAII, UniqueHandleBasics) {
+  dummy_close::called = 0;
   using uh = unique_handle<int, -1, dummy_close>;
   {
     uh a{42};
@@ -44,4 +47,3 @@ TEST(RAII, ScopeGuard) {
   }
   EXPECT_EQ(x, 42);
 }
-
