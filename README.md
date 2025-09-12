@@ -14,7 +14,7 @@ A small header-only library focused on practical systems building blocks:
 - C++20 compiler (GCC 11+, Clang 13+, AppleClang 14+)
 
 ```
-cmake -S syslib -B build -DSYSLIB_BUILD_TESTS=ON -DSYSLIB_BUILD_BENCHMARKS=ON
+cmake -S . -B build -DSYSLIB_BUILD_TESTS=ON -DSYSLIB_BUILD_BENCHMARKS=ON
 cmake --build build -j
 ctest --test-dir build -V
 ```
@@ -85,4 +85,3 @@ Targets to publish:
 - Add epoll/kqueue handle wrappers with `unique_handle`
 - Extend backoff strategies and tune per architecture
 - Add perf graphs to `docs/` (SPSC throughput, MPMC scalability curves)
-
