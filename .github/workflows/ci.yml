@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        compiler: [gcc, clang]
+        san: [none, asan-ubsan]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake g++ clang
+      - name: Configure
+        run: |
+          cmake -S syslib -B build \
+            -G Ninja \
+            -DSYSLIB_BUILD_TESTS=ON \
+            -DSYSLIB_BUILD_BENCHMARKS=OFF \
+            -DSYSLIB_ENABLE_ASAN=$([[ "${{ matrix.san }}" == "asan-ubsan" ]] && echo ON || echo OFF) \
+            -DSYSLIB_ENABLE_UBSAN=$([[ "${{ matrix.san }}" == "asan-ubsan" ]] && echo ON || echo OFF)
+      - name: Build
+        run: cmake --build build -j 2
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
