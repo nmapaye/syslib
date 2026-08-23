@@ -33,11 +33,9 @@ static void run_case(int producers, int consumers, int msgs_per_producer) {
       auto& bucket = lat_samples[c];
       bucket.reserve(msgs_per_producer * producers / consumers / sample_rate + 64);
       while (!go.load(std::memory_order_acquire)) {}
-      int local = 0;
       while (true) {
         Msg m;
         if (q.try_dequeue(m)) {
-          ++local;
           int g = consumed.fetch_add(1, std::memory_order_relaxed) + 1;
           if (g % sample_rate == 0) {
             uint64_t t1 = now_ns();
@@ -45,18 +43,16 @@ static void run_case(int producers, int consumers, int msgs_per_producer) {
           }
           if (g >= total_msgs) break;
         } else {
+          if (consumed.load(std::memory_order_relaxed) >= total_msgs) break;
           std::this_thread::yield();
         }
       }
     });
   }
 
-  // Start time defined just before enabling producers
-  uint64_t t0 = now_ns();
-
   // Producers
   for (int p = 0; p < producers; ++p) {
-    threads.emplace_back([&, p]{
+    threads.emplace_back([&]{
       while (!go.load(std::memory_order_acquire)) {}
       for (int i = 0; i < msgs_per_producer; ++i) {
         Msg m{now_ns()};
@@ -104,4 +100,3 @@ int main() {
   for (int n = 1; n <= 8; ++n) run_case(n, n, msgs_per_producer);
   return 0;
 }
-
