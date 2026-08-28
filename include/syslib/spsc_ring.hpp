@@ -4,8 +4,12 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
+#include <optional>
+#include <stdexcept>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "tmp.hpp"
@@ -26,6 +30,13 @@ inline constexpr std::size_t next_pow2(std::size_t v) {
 #endif
   return v + 1;
 }
+
+inline std::size_t checked_capacity(std::size_t requested) {
+  if (requested == 0) throw std::invalid_argument("spsc_ring capacity must be greater than zero");
+  const std::size_t capacity = next_pow2(requested);
+  if (capacity == 0 || capacity < requested) throw std::length_error("spsc_ring capacity is too large");
+  return capacity;
+}
 }
 
 template <class T, class Policy = queue_policy<queue_kind::spsc>>
@@ -35,7 +46,7 @@ class spsc_ring {
   using policy_type = Policy;
 
   explicit spsc_ring(std::size_t capacity)
-      : capacity_(detail::next_pow2(capacity)), mask_(capacity_ - 1),
+      : capacity_(detail::checked_capacity(capacity)), mask_(capacity_ - 1),
         storage_(capacity_) {}
 
   spsc_ring(const spsc_ring&) = delete;
@@ -45,7 +56,7 @@ class spsc_ring {
   bool try_push(const T& v) noexcept(std::is_nothrow_copy_constructible_v<T>) {
     auto head = head_.load(std::memory_order_relaxed);
     if (head - tail_.load(std::memory_order_acquire) >= capacity_) return false;
-    storage_[head & mask_] = v;
+    storage_[head & mask_].emplace(v);
     head_.store(head + 1, policy_type::write_order);
     return true;
   }
@@ -53,7 +64,7 @@ class spsc_ring {
   bool try_push(T&& v) noexcept(std::is_nothrow_move_constructible_v<T>) {
     auto head = head_.load(std::memory_order_relaxed);
     if (head - tail_.load(std::memory_order_acquire) >= capacity_) return false;
-    storage_[head & mask_] = std::move(v);
+    storage_[head & mask_].emplace(std::move(v));
     head_.store(head + 1, policy_type::write_order);
     return true;
   }
@@ -62,7 +73,7 @@ class spsc_ring {
   bool try_emplace(Args&&... args) noexcept(std::is_nothrow_constructible_v<T, Args...>) {
     auto head = head_.load(std::memory_order_relaxed);
     if (head - tail_.load(std::memory_order_acquire) >= capacity_) return false;
-    storage_[head & mask_] = T(std::forward<Args>(args)...);
+    storage_[head & mask_].emplace(std::forward<Args>(args)...);
     head_.store(head + 1, policy_type::write_order);
     return true;
   }
@@ -81,16 +92,30 @@ class spsc_ring {
   bool try_pop(T& out) noexcept(std::is_nothrow_move_assignable_v<T>) {
     auto tail = tail_.load(std::memory_order_relaxed);
     if (tail == head_.load(policy_type::read_order)) return false;
-    out = std::move(storage_[tail & mask_]);
+    auto& slot = storage_[tail & mask_];
+    out = std::move(*slot);
+    slot.reset();
     tail_.store(tail + 1, std::memory_order_release);
     return true;
   }
 
+  [[nodiscard]] std::optional<T> try_pop() {
+    auto tail = tail_.load(std::memory_order_relaxed);
+    if (tail == head_.load(policy_type::read_order)) return std::nullopt;
+    auto& slot = storage_[tail & mask_];
+    std::optional<T> result(std::in_place, std::move(*slot));
+    slot.reset();
+    tail_.store(tail + 1, std::memory_order_release);
+    return result;
+  }
+
   T pop_wait() {
     typename policy_type::backoff bk{};
-    T v{};
-    while (!try_pop(v)) bk();
-    return v;
+    for (;;) {
+      auto value = try_pop();
+      if (value.has_value()) return std::move(*value);
+      bk();
+    }
   }
 
   [[nodiscard]] bool empty() const noexcept {
@@ -110,7 +135,7 @@ class spsc_ring {
   const std::size_t mask_;
   alignas(64) std::atomic<std::size_t> head_{0};
   alignas(64) std::atomic<std::size_t> tail_{0};
-  std::vector<T> storage_;
+  std::vector<std::optional<T>> storage_;
 };
 
 // Trait: this implementation is lock-free (uses lock-free atomics if available)
@@ -118,4 +143,3 @@ template <class T, class P>
 struct is_lock_free<spsc_ring<T, P>> : std::bool_constant<std::atomic<std::size_t>::is_always_lock_free> {};
 
 }  // namespace syslib
-
