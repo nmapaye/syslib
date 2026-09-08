@@ -63,9 +63,16 @@ class mpmc_queue {
   T pop_wait() {
     std::unique_lock lock(mutex_);
     available_.wait(lock, [this] { return !queue_.empty(); });
-    T result(std::move(queue_.front()));
-    queue_.pop_front();
-    return result;
+    try {
+      T result(std::move(queue_.front()));
+      queue_.pop_front();
+      return result;
+    } catch (...) {
+      const bool value_available = !queue_.empty();
+      lock.unlock();
+      if (value_available) available_.notify_one();
+      throw;
+    }
   }
 
   [[nodiscard]] bool empty() const {
