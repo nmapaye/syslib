@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <future>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -37,6 +38,19 @@ struct LifetimeTracked {
   static inline std::atomic<int> live{0};
 };
 
+struct ThrowOnceOnMove {
+  explicit ThrowOnceOnMove(int value) : value(value) {}
+  ThrowOnceOnMove(const ThrowOnceOnMove&) = delete;
+  ThrowOnceOnMove& operator=(const ThrowOnceOnMove&) = delete;
+  ThrowOnceOnMove(ThrowOnceOnMove&& other) {
+    if (moves.fetch_add(1, std::memory_order_relaxed) == 0) throw std::runtime_error("synthetic move failure");
+    value = other.value;
+  }
+  ThrowOnceOnMove& operator=(ThrowOnceOnMove&&) = delete;
+  int value;
+  static inline std::atomic<int> moves{0};
+};
+
 }  // namespace
 
 TEST(MPMC, BasicEnqueueDequeueAndInspection) {
@@ -69,6 +83,41 @@ TEST(MPMC, BlockingPopWakesForAProducer) {
   EXPECT_EQ(ready.wait_for(1s), std::future_status::ready);
   EXPECT_EQ(ready.get(), 77);
   consumer.join();
+}
+
+TEST(MPMC, ThrowingExtractionPreservesNotificationForAnotherWaiter) {
+  ThrowOnceOnMove::moves.store(0, std::memory_order_relaxed);
+  mpmc_queue<ThrowOnceOnMove> queue;
+  std::promise<int> popped;
+  std::promise<bool> threw;
+  auto popped_result = popped.get_future();
+  auto threw_result = threw.get_future();
+  std::atomic<int> ready{0};
+
+  auto consume = [&] {
+    ready.fetch_add(1, std::memory_order_release);
+    try {
+      popped.set_value(queue.pop_wait().value);
+    } catch (const std::runtime_error&) {
+      threw.set_value(true);
+    }
+  };
+  std::thread first(consume);
+  std::thread second(consume);
+  while (ready.load(std::memory_order_acquire) != 2) std::this_thread::yield();
+  std::this_thread::sleep_for(20ms);
+  queue.emplace(91);
+
+  const bool woke_without_another_push = popped_result.wait_for(500ms) == std::future_status::ready;
+  if (!woke_without_another_push) queue.emplace(92);
+  EXPECT_EQ(threw_result.wait_for(1s), std::future_status::ready);
+  EXPECT_EQ(popped_result.wait_for(1s), std::future_status::ready);
+  first.join();
+  second.join();
+
+  EXPECT_TRUE(woke_without_another_push);
+  EXPECT_TRUE(threw_result.get());
+  EXPECT_EQ(popped_result.get(), 91);
 }
 
 TEST(MPMC, ReclaimsDequeuedStorageImmediately) {
